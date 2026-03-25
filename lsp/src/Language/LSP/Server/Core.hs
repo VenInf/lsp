@@ -175,21 +175,28 @@ requestHandler m h = Handlers (SMethodMap.singleton m (ClientMessageHandler h)) 
 
 -- | TODO: Trying to make a new static registration, complimentary to the dynamic`registerCapability` 
 
-newtype StaticRequestHandler f (t :: MessageKind) (m :: Method ClientToServer t) = StaticRequestHandler (Handler f m, ServerCapability m)
+newtype StaticRequestHandler f (t :: MessageKind) (m :: Method ClientToServer t) = StaticRequestHandler (ClientMessageHandler f t m, ServerCapability m)
 
 data StaticHandlers f = StaticHandlers
   { reqStaticHandlers :: !(SMethodMap (StaticRequestHandler f Request))
   , notStaticHandlers :: !(SMethodMap (StaticRequestHandler f Notification))
   }
 
-staticRegisterCapability :: 
-  forall f t (m :: Method ClientToServer t).
-  SClientMethod m ->
+staticRequestHandler :: 
+  forall f (m :: Method ClientToServer Request).
+  SMethod m ->
   ServerCapability m ->
   Handler f m ->
   StaticHandlers f
-staticRegisterCapability method capability f = undefined
+staticRequestHandler m capability h = StaticHandlers (SMethodMap.singleton m (StaticRequestHandler (ClientMessageHandler h, capability))) mempty
 
+staticNotificationHandler :: 
+  forall f (m :: Method ClientToServer Notification).
+  SMethod m ->
+  ServerCapability m ->
+  Handler f m ->
+  StaticHandlers f
+staticNotificationHandler m capability h = StaticHandlers mempty (SMethodMap.singleton m (StaticRequestHandler (ClientMessageHandler h, capability)))
 
 -- | Wrapper to restrict 'Handler's to  ClientToServer' 'Method's
 newtype ClientMessageHandler f (t :: MessageKind) (m :: Method ClientToServer t) = ClientMessageHandler (Handler f m)
