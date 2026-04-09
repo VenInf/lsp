@@ -3,6 +3,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- there's just so much!
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unticked-promoted-constructors #-}
@@ -59,6 +61,7 @@ import Language.LSP.Protocol.Utils.SMethodMap qualified as SMethodMap
 import Language.LSP.Server.Core
 import Language.LSP.VFS as VFS
 import Prettyprinter
+import Language.LSP.Protocol.Capabilities (ServerCapability)
 
 data LspProcessingLog
   = VfsLog VfsLog
@@ -208,6 +211,35 @@ initializeRequestHandler logger ServerDefinition{..} vfs sendFunc waitSender req
     pure Nothing
    where
     msg = T.pack $ unwords ["Error on initialize:", show e]
+
+collectServerCapabilities :: StaticHandlers f -> ServerCapabilities
+collectServerCapabilities staticHandlers = undefined
+  where
+  supported' m b
+    | supported_b m = Just b
+    | otherwise = Nothing
+
+  supported :: forall m. SClientMethod m -> Maybe Bool
+  supported = Just . supported_b
+
+  supported_b :: forall m. SClientMethod m -> Bool
+  supported_b m = case splitClientMethod m of
+    IsClientNot -> SMethodMap.member m $ notStaticHandlers staticHandlers
+    IsClientReq -> SMethodMap.member m $ reqStaticHandlers staticHandlers
+    IsClientEither -> error "capabilities depend on custom method"
+
+  getHandler :: forall f t m. StaticHandlers f -> SClientMethod m -> Maybe (StaticHandler f t m)
+  getHandler sHandlers m = staticHandler
+    where
+      staticHandler :: Maybe (StaticHandler f t m) 
+      staticHandler = case splitClientMethod m of
+        IsClientNot -> SMethodMap.lookup m $ notStaticHandlers sHandlers
+        IsClientReq -> SMethodMap.lookup m $ reqStaticHandlers sHandlers
+        IsClientEither -> error "capabilities depend on custom method"
+
+  capability :: forall m. SClientMethod m -> Maybe (ServerCapability m)
+  capability m = (\(StaticHandler (_h, c)) -> c) <$> getHandler staticHandlers m
+
 
 {- | Infers the capabilities based on registered handlers, and sets the appropriate options.
  A provider should be set to Nothing if the server does not support it, unless it is a
